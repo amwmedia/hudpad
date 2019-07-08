@@ -27,9 +27,11 @@ let onDraw = noop;
 const sceneAlphaMap = ['A','B','C','D','E','F','G','H'];
 const createScene = (col, row) => ({
 	col, row, letter: sceneAlphaMap[row],
+	overviewHandlers: [],
 	overviewCtx: canvas.createCanvas(size, 1).getContext('2d'),
 	overviewUpdate: noop,
 	overviewDraw: noop,
+	sceneHandlers: [],
 	sceneUpdate: noop,
 	sceneDraw: noop,
 	pixelCtx: canvas.createCanvas(1, 1).getContext('2d'),
@@ -146,25 +148,44 @@ const draw = () => {
 const launchApi = scene => ({
 	overview: {
 		update: f => scene.overviewUpdate = f,
-		draw: f => scene.overviewDraw = f
+		draw: f => scene.overviewDraw = f,
+		onKey: f => {
+			scene.overviewHandlers.push(f);
+			return () => scene.overviewHandlers = scene.overviewHandlers.filter(h => h !== f);
+		}
 	},
 	scene: {
 		update: f => scene.sceneUpdate = f,
-		draw: f => scene.sceneDraw = f
+		draw: f => scene.sceneDraw = f,
+		onKey: f => {
+			scene.sceneHandlers.push(f);
+			return () => scene.sceneHandlers = scene.sceneHandlers.filter(h => h !== f);
+		}
 	},
 	pixel: {
 		update: f => scene.pixelUpdate = f,
 		draw: f => scene.pixelDraw = f
 	},
-	onKey: noop,
 	marquee: marqueeAction,
 });
 
+const unloadSceneAtLocation = (colIdx, rowIdx) => {
+	delete config[colIdx][rowIdx];
+	if (Object.keys(config[colIdx]).length === 0) { delete config[colIdx]; }
+	state.scenes[colIdx][rowIdx] = createScene(colIdx, rowIdx);
+	saveConfig();
+};
 const loadSceneAtLocation = (scenePath, colIdx, rowIdx) => {
 	try {
 		require(scenePath)(launchApi(state.scenes[colIdx][rowIdx]));
+		saveConfig();
 	} catch (err) {
-		state.systemError = {speed: 0.2, text: `LOAD ERROR: "${err.message}"`};
+		dialog.error(
+			err.message, `ERROR LOADING (page ${colIdx + 1}, row ${sceneAlphaMap[rowIdx]})`,
+			0, function () {
+				unloadSceneAtLocation(colIdx, rowIdx);
+			}
+		);
 	}
 };
 
@@ -180,10 +201,7 @@ const init = () => {
 			keyDownTimer = setTimeout(() => {
 				const hasConfig = config[x] != null && config[x][y] != null;
 				if (hasConfig) {
-					delete config[x][y];
-					if (Object.keys(config[x]).length === 0) { delete config[x]; }
-					scenes[x][y] = createScene(x, y);
-					saveConfig();
+					unloadSceneAtLocation(x, y);
 				} else {
 					dialog.fileselect('pick a file', 'pick a file title', null, function (code, val) {
 						const filePath = val
@@ -193,7 +211,6 @@ const init = () => {
 						if (filePath && filePath.endsWith('.js')) {
 							config[x] = config[x] || {};
 							config[x][y] = filePath;
-							saveConfig();
 							loadSceneAtLocation(filePath, x, y);
 						}
 					});
@@ -201,11 +218,19 @@ const init = () => {
 			}, 2000);
 		}
 
-		if (y === 8 && !pressed) { // col change
+		if (y === 8 && !pressed) {
+			// col change
 			state.col = (col === x ? null : x);
 			if (state.col == null) { state.row = null; }
-		} else if (x === 8 && !pressed && col != null) { // row change
+		} else if (x === 8 && !pressed && col != null) {
+			// row change
 			state.row = (row === y ? null : y);
+		} else if (x < 8 && y < 8 && col != null && row == null && scenes[col][y].pixelDraw !== noop && !pressed) {
+			// overview key pressed
+			scenes[col][y].overviewHandlers.forEach(h => h(x));
+		} else if (x < 8 && y < 8 && col != null && row != null && !pressed) {
+			// scene key pressed
+			scenes[col][row].sceneHandlers.forEach(h => h(x, y));
 		} else if (x < 8 && y < 8 && scenes[x][y].pixelDraw !== noop && !pressed) {
 			// jump into the selected function
 			if (col == null && scenes[x][y].pixelDraw !== noop) {
@@ -230,10 +255,13 @@ pad.connect().then(() => {
 			const scenePath = config[colIdx][rowIdx];
 			if (scenePath == null) { return; }
 			if (!fs.pathExistsSync(scenePath)) {
-				state.systemError = {
-					speed: 0.2,
-					text: `PAGE ${colIdx}, ${sceneAlphaMap[rowIdx]} NOT FOUND: "${scenePath}"`
-				};
+				dialog.error(
+					`NOT FOUND: "${scenePath}"`,
+					`ERROR LOADING (page ${colIdx + 1}, row ${sceneAlphaMap[rowIdx]})`,
+					0, function () {
+						unloadSceneAtLocation(colIdx, rowIdx);
+					}
+				);
 			} else {
 				loadSceneAtLocation(scenePath, colIdx, rowIdx);
 			}
