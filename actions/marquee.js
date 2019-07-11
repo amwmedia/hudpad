@@ -1,11 +1,11 @@
-const defaults = {speed: 0.1};
+const defaults = {speed: 0.15};
 const size = 8;
 
 module.exports = {
   update(state, ctx) {
     const {x, width, speed, text} = Object.assign({}, defaults, state);
+    state.width = ctx.measureText(text).width;
     if (x == null) {
-      state.width = ctx.measureText(text).width;
       state.x = size + speed;
     } else if (state && x != null) {
       state.x -= speed;
