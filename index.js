@@ -104,9 +104,9 @@ const draw = () => {
 			const pixelView = state.col == null && state.row == null;
 			const pixelHasCfg = config[col] && config[col][row];
       acc[row].push(
-        (v > 150 ? [col, row, pad.red.full]
-        : (v > 125 ? [col, row, pad.red.medium]
-        : (v > 100 ? [col, row, pad.red.low]
+        (v > 150 ? [col, row, pad.amber.full]
+        : (v > 125 ? [col, row, pad.amber.medium]
+        : (v > 100 ? [col, row, pad.amber.low]
         : (pixelView && pixelHasCfg ? [col, row, pad.green.medium]
 				:	[col, row, pad.off]
 				))))
