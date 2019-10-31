@@ -23,7 +23,7 @@
   "devDependencies": {
     "nodemon": "^1.19.1",
     "pkg": "^4.4.0",
-    "yarn": "^1.16.0"
+    "yarn": "^1.17.3"
   },
   "pkg": {
     "targets": [
